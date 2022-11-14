@@ -204,6 +204,18 @@ fn generate_pom(lib: &Library, config: &JavaBindgenConfig) -> FormattingResult<(
         f.writeln("  <plugins>")?;
         f.writeln("    <plugin>")?;
         f.writeln("      <groupId>org.apache.maven.plugins</groupId>")?;
+        f.writeln("      <artifactId>maven-compiler-plugin</artifactId>")?;
+        f.writeln("      <version>3.8.1</version>")?;
+        f.writeln("      <configuration>")?;
+        f.writeln("        <source>1.8</source>")?;
+        f.writeln("        <target>1.8</target>")?;
+        f.writeln("         <compilerArgs>")?;
+        f.writeln("           <arg>-Xlint:removal</arg>")?;
+        f.writeln("         </compilerArgs>")?;
+        f.writeln("      </configuration>")?;
+        f.writeln("    </plugin>")?;
+        f.writeln("    <plugin>")?;
+        f.writeln("      <groupId>org.apache.maven.plugins</groupId>")?;
         f.writeln("      <artifactId>maven-source-plugin</artifactId>")?;
         f.writeln("      <version>2.2.1</version>")?;
         f.writeln("      <executions>")?;
@@ -282,18 +294,13 @@ fn generate_native_func_class(lib: &Library, config: &JavaBindgenConfig) -> Form
         blocked(f, |f| {
             f.writeln("try")?;
             blocked(f, |f| {
-                let env_variable_name = format!(
-                    "{}_NATIVE_LIB_LOCATION",
-                    lib.settings.name.capital_snake_case()
-                );
-                f.writeln(&format!(
-                    "String nativeLibLocation = System.getenv(\"{}\");",
-                    env_variable_name
-                ))?;
-                f.writeln("if(nativeLibLocation != null)")?;
-                blocked(f, |f| f.writeln("System.load(nativeLibLocation);"))?;
+                let libname = format!("{}_java", config.ffi_name);
 
-                f.writeln("else")?;
+                f.writeln("try")?;
+                blocked(f, |f| {
+                    f.writeln(&format!("System.loadLibrary(\"{}\");", libname))
+                })?;
+                f.writeln("catch(Throwable e)")?;
                 blocked(f, |f| {
                     f.writeln("boolean loaded = false;")?;
                     let libname = format!("{}_java", config.ffi_name);
@@ -308,7 +315,7 @@ fn generate_native_func_class(lib: &Library, config: &JavaBindgenConfig) -> Form
                                     ))
                                 })?;
                             }
-                            OS::Linux => {
+                            OS::Linux | OS::Android => {
                                 f.writeln("if(!loaded)")?;
                                 blocked(f, |f| {
                                     f.writeln(&format!(
@@ -333,16 +340,16 @@ fn generate_native_func_class(lib: &Library, config: &JavaBindgenConfig) -> Form
                     f.writeln("if(!loaded)")?;
                     blocked(f, |f| {
                         f.writeln("throw new Exception(\"Unable to load any of the included native library\");")
-                    })?;
-
-                    f.newline()?;
-
-                    // Check the loaded binary version
-                    f.writeln("String loadedVersion = version();")?;
-                    f.writeln("if (!loadedVersion.equals(VERSION))")?;
-                    blocked(f, |f| {
-                        f.writeln(&format!("throw new Exception(\"{} module version mismatch. Expected \" + VERSION + \" but loaded \" + loadedVersion);", lib.settings.name))
                     })
+                })?;
+
+                f.newline()?;
+
+                // Check the loaded binary version
+                f.writeln("String loadedVersion = version();")?;
+                f.writeln("if (!loadedVersion.equals(VERSION))")?;
+                blocked(f, |f| {
+                    f.writeln(&format!("throw new Exception(\"{} module version mismatch. Expected \" + VERSION + \" but loaded \" + loadedVersion);", lib.settings.name))
                 })
             })?;
             f.writeln("catch(Exception e)")?;
