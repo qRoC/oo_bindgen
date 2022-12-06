@@ -78,10 +78,16 @@ impl BindingBuilder for CBindingBuilder {
     }
 
     fn test(&mut self) {
+        let args = if cfg!(target_os = "linux") {
+            vec![".", "-C", "Debug", "-T", "MemCheck", "-VV"]
+        } else {
+            vec![".", "-C", "Debug", "-VV"]
+        };
+
         // Run unit tests
         let result = Command::new("ctest")
             .current_dir(&self.build_dir())
-            .args(&[".", "-C", "Debug"])
+            .args(&args)
             .status()
             .unwrap();
         assert!(result.success());
